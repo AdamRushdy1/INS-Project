@@ -43,8 +43,8 @@ INS-Project/
 ├── log.txt  
 │  
 └── images/  
-    ├── statePlot.png  
-    └── attitudeExample.png  
+      ├── statePlot.png  
+      └── attitudeExample.png  
     
 ## Example Results
 Attitude Visualization  
