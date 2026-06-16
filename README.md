@@ -36,12 +36,11 @@ Python INS Algorithm
     
 ## Repository Structure
 INS-Project/  
-
--liveINS.py  
--plotLog.py  
--readRawData.ino  
--log.txt  
--images/  
+liveINS.py  
+plotLog.py  
+readRawData.ino  
+log.txt  
+images/  
     -statePlot.png  
     -attitudeExample.png  
     
