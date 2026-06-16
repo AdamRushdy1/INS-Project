@@ -19,7 +19,7 @@ PC - Runs INS and visualization software
 
 ## Software Architecture
 IMU + GPS  
-    |
+    |  
 ESP32 Data Collection  
     |  
 Serial Communication  
