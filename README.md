@@ -19,20 +19,17 @@ PC - Runs INS and visualization software
 
 ## Software Architecture
 IMU + GPS  
-    │  
-    ▼  
+    |
 ESP32 Data Collection  
-    │  
-    ▼  
+    |  
 Serial Communication  
-    │  
-    ▼  
+    |  
 Python INS Algorithm  
-    │  
-    ├── Attitude Estimation  
-    ├── Position Estimation  
-    ├── State Logging  
-    └── Visualization  
+    |  
+    |- Attitude Estimation  
+    |- Position Estimation  
+    |- State Logging  
+    |- Visualization  
     
 ## Repository Structure
 liveINS.py  
