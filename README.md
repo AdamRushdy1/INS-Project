@@ -90,3 +90,4 @@ Extended Kalman Filter implementation
 Barometric altitude integration  
 Flight benchmarking  
 Improved GPS outage handling  
+Corrected initial yaw drift
