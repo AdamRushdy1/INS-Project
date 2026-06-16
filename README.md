@@ -17,7 +17,7 @@ BN-880 GPS - GPS + magnetometer
 MPU 6050 - Accelerometer + gyroscope
 PC - Runs INS and visualization software
 
-##Software Architecture
+## Software Architecture
 IMU + GPS
     │
     ▼
