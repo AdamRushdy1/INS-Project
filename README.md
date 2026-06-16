@@ -45,7 +45,7 @@ images/
     
 ## Example Results
 Attitude Visualization  
-![Attitude Visualization](images/attitudeExample.png)
+![Attitude Visualization](images/visExample.png)
 
 Flight State History  
 ![State History](images/statePlot.png)
