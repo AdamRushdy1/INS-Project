@@ -1,6 +1,6 @@
 ## INS Navigation System
 
-![Attitude Visualization](images/attitudeDemo.gif){:width="5%"}
+![Attitude Visualization](images/attitudeDemo.gif)
 
 ## Overview
 This project implements a low-cost Inertial Navigation System (INS) using an ESP32, IMU, magnetometer, and GPS receiver. The system estimates aircraft attitude, velocity, and position by combining inertial sensor measurements with GPS updates.
