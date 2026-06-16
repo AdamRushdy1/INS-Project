@@ -35,7 +35,6 @@ Python INS Algorithm
     └── Visualization  
     
 ## Repository Structure
-INS-Project/  
 liveINS.py  
 plotLog.py  
 readRawData.ino  
