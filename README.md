@@ -36,15 +36,14 @@ Python INS Algorithm
     
 ## Repository Structure
 INS-Project/  
-│  
-├── liveINS.py  
-├── plotLog.py  
-├── readRawData.ino  
-├── log.txt  
-│  
-└── images/  
--├── statePlot.png  
--└── attitudeExample.png  
+
+-liveINS.py  
+-plotLog.py  
+-readRawData.ino  
+-log.txt  
+-images/  
+    -statePlot.png  
+    -attitudeExample.png  
     
 ## Example Results
 Attitude Visualization  
