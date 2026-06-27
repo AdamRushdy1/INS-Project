@@ -1,4 +1,4 @@
-## INS Navigation System
+## Inertial Navigation System
 
 ![Attitude Visualization](images/attitudeDemo.gif)
 
