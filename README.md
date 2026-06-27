@@ -8,7 +8,7 @@ This project implements a low-cost Inertial Navigation System (INS) using an ESP
 The project was developed as a personal aerospace controls and navigation project to explore sensor fusion, inertial navigation, and state estimation techniques.
 
 ## Features
-Real-time attitude estimation (Roll, Pitch, Yaw)  
+Real-time attitude estimation using quaternions 
 GPS position tracking  
 3D orientation visualization  
 State logging and post-flight analysis  
@@ -85,8 +85,7 @@ python liveINS.py
 If no hardware setup, to visualize example log, run:  
 python plotLog.py  
 
-## Future Improvements
-Extended Kalman Filter implementation  
+## Future Improvements 
 Barometric altitude integration  
 Flight benchmarking  
 Improved GPS outage handling  
