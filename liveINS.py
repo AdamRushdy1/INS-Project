@@ -1,9 +1,5 @@
-# Current state: attitude - SLERP, pos/vel - linear KF (Goal: Full EKF)
-
 # Issues
 # - Heavier yaw drift/mag issues?
-# - 'Choppy' Pos and velocity estimates w/ minor x/y drift
-# - Poor altitude (z) estimation/drift
 # - Need to repurpose for reading raw data from log
 
 import serial
@@ -14,7 +10,7 @@ from vpython import *
 import math
 
 # Complementary filter weights
-ALPHA = 0.985
+ALPHA = 0.975
 ALPHAY = 0.995
 
 # Open serial
@@ -28,12 +24,10 @@ f.write("Time,Pos_x,Pos_y,Pos_z,Vel_x,Vel_y,Vel_zRoll,Pitch,Yaw\n")
 scene.width = 1200
 scene.height = 700
 scene.background = color.white
-
 # Initial camera pos
 scene.camera.pos = vector(-5, 0, 0)
 scene.camera.axis = vector(5, 0, 0)  # points toward origin
 scene.camera.rotate(angle=-pi/2, axis=vector(1,0,0))
-
 # Inital basis vectors (i, j, k)
 xVec = arrow(pos=vector(0, 0, 0), axis=vector(1, 0, 0), color=color.red)
 yVec = arrow(pos=vector(0, 0, 0), axis=vector(0, 1, 0), color=color.blue)
@@ -41,35 +35,6 @@ zVec = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 1), color=color.green)
 xPerm = arrow(pos=vector(0, 0, 0), axis=vector(2, 0, 0), color=color.black, shaftwidth=0.01)
 yPerm = arrow(pos=vector(0, 0, 0), axis=vector(0, 2, 0), color=color.black, shaftwidth=0.01)
 zPerm = arrow(pos=vector(0, 0, 0), axis=vector(0, 0, 2), color=color.black, shaftwidth=0.01)
-
-# Set finite logging time
-collectionTime = (120) + time.time()
-
-# Set initial conditions
-tPrev, ztPrev = time.time(), time.time()
-gpsInit = False
-headingInit = False
-q = np.array([1, 0, 0, 0]) # quaternion initialization
-x_n = np.array([0, 0, 0, 0, 0, 0]) # KF state initialization (x, y, z, vx, vy, vz)
-
-# EKF matrices
-# Process noise covariance
-Q = np.diag([0.01, 0.01, 0.01, 0.1, 0.1, 0.1])
-# Error covariance
-P = np.eye(6) * 500
-# Measurement matrices (currently seperate for partial updates)
-H_x = np.array([[1, 0, 0, 0, 0, 0]])
-H_y = np.array([[0, 1, 0, 0, 0, 0]])
-H_z = np.array([[0, 0, 1, 0, 0, 0]])
-H_vx = np.array([[0, 0, 0, 1, 0, 0]])
-H_vy = np.array([[0, 0, 0, 0, 1, 0]])
-H_vz = np.array([[0, 0, 0, 0, 0, 1]])
-
-# Measurement covariance
-R_xy = np.array([[5.0]])   # position noise
-R_z  = np.array([[10.0]])  # altitude noisier
-R_vxy = np.array([[5.0]])   # velocity noise (xy)
-R_vz  = np.array([[20.0]])  # velocity noisierer (z)
 
 # Calculate rotation matrix from quaternion for basis visualization
 def rotation_matrix(q):
@@ -187,152 +152,186 @@ def kfUpdate(x_n, P, H, R, z):
     P = (np.eye(len(x_n)) - K @ H) @ P    
     return x_n, P
 
-while time.time() < collectionTime:
-    if ser.in_waiting > 0:
-        # Read line
-        line = ser.readline().decode('utf-8', errors='ignore').strip()
-        values = line.split(",")
+def main():
 
-        # Get good gps connection
-        if len(values) == 16:
-            if not gpsInit and (float(values[-1]) < 2.0 and float(values[-1]) > 0.1):
-                    # Set initial values
-                    lat0, lon0, alt0 = values[9:12]
-                    lat0 = float(lat0)
-                    lon0 = float(lon0)
-                    alt0 = float(alt0)
-                    gpsInit = True
-                    accel0 = np.array([float(values[0]), float(values[1]), float(values[2])])
-                    gpsX = float(values[9])
-                    gpsY = float(values[10])
-                    gpsZ = float(values[11])
+    # Set finite logging time
+    collectionTime = (30) + time.time()
+
+    # Set initial conditions
+    tPrev = time.time()
+    ztPrev = time.time() 
+
+    gpsInit = False
+    headingInit = False
+    q = np.array([1, 0, 0, 0]) # quaternion initialization
+    x_n = np.array([0, 0, 0, 0, 0, 0]) # KF state initialization (x, y, z, vx, vy, vz)
+
+    # EKF matrices
+    # Process noise covariance
+    Q = np.diag([0.01, 0.01, 0.01, 0.1, 0.1, 0.1])
+    # Error covariance
+    P = np.eye(6) * 500
+    # Measurement matrices (currently seperate for partial updates)
+    H_x = np.array([[1, 0, 0, 0, 0, 0]])
+    H_y = np.array([[0, 1, 0, 0, 0, 0]])
+    H_z = np.array([[0, 0, 1, 0, 0, 0]])
+    H_vx = np.array([[0, 0, 0, 1, 0, 0]])
+    H_vy = np.array([[0, 0, 0, 0, 1, 0]])
+    H_vz = np.array([[0, 0, 0, 0, 0, 1]])
+
+    # Measurement covariance
+    R_xy = [5.0]  # position noise
+    R_z  = [10.0]  # altitude noisier
+    R_vxy = [5.0]   # velocity noise (xy)
+    R_vz  = [20.0]  # velocity noisierer (z)
+
+    while time.time() < collectionTime:
+        tNow = time.time()
+        deltaT = tNow - tPrev
+        tPrev = tNow
+
+        if ser.in_waiting > 0:
+            # Read line
+            line = ser.readline().decode('utf-8', errors='ignore').strip()
+            values = line.split(",")
+
+            # Get good gps connection
+            if len(values) == 16:
+                if not gpsInit and (float(values[-1]) < 2.0 and float(values[-1]) > 0.1):
+                        # Set initial values
+                        lat0, lon0, alt0 = values[9:12]
+                        lat0 = float(lat0)
+                        lon0 = float(lon0)
+                        alt0 = float(alt0)
+                        gpsInit = True
+                        accel0 = np.array([float(values[0]), float(values[1]), float(values[2])])
+                        gpsX = float(values[9])
+                        gpsY = float(values[10])
+                        gpsZ = float(values[11])
+                        
+                elif gpsInit:
+                    # Get values
+                    # Format: ax,ay,az,gx,gy,gz,magx,magy,magz,lat,lon,alt,speed,course,sats,hdop
+                    values = [float(x) for x in values[0:15]]
+                    accel = np.array(values[0:3]) 
+                    gyro = np.array(values[3:6])
+
+                    #-------------------------------------------------------------------
+                    #[][][][][][][][][][][][]Actual Calculations[][][][][][][][][][][][]
+                    #-------------------------------------------------------------------
+
+                    # Update gyro quaternion
+                    q = quatIntegrate(q, gyro, deltaT)
+                    # Update accel quaternion
+                    q1 = accelAngle(accel)
+                    # Add yaw to accel quaternion since can't estimate yaw
+                    rollA, pitchA, _ = quatToEuler(q1)
+                    _, _, yawG = quatToEuler(q)
+                    q1 = eulerToQuat(rollA, pitchA, yawG)
+
+                    # Fuse gyro and accel quaternions
+                    q = slerp(q, q1, 1-ALPHA)
+
+                    # Get magnetometer heading
+                    heading = getHeading(values[6], values[7], values[8], q) * -1
+
+                    # Issues with initial yaw estimations
+                    #--------------------------------------
+                    if not headingInit:
+                        heading0 = heading
+                    heading -= heading0
+                    heading = heading * math.pi / 180
+
+                    roll, pitch, _ = quatToEuler(q)
+                    q1 = eulerToQuat(roll, pitch, heading)
+
+                    # Initialize quaternion from mag on first frame
+                    if not headingInit:
+                        q = q1
+                        headingInit = True
+                    else:
+                        # Correct yaw toward mag
+                        q_mag = eulerToQuat(roll, pitch, heading)
+                        q = slerp(q, q1, 1 - ALPHAY)
+                    #--------------------------------------
+
+                    # Adjust for rotation and gravity
+                    Rot = rotation_matrix(q)
+                    accel = np.dot(Rot.T, accel) - accel0
+
+                    # KF prediction
+                    F = np.array([
+                        [1, 0, 0, deltaT, 0, 0],
+                        [0, 1, 0, 0, deltaT, 0],
+                        [0, 0, 1, 0, 0, deltaT],
+                        [0, 0, 0, 1, 0, 0],
+                        [0, 0, 0, 0, 1, 0],
+                        [0, 0, 0, 0, 0, 1]])
                     
-            elif gpsInit:
-                # Get values
-                # Format: ax,ay,az,gx,gy,gz,magx,magy,magz,lat,lon,alt,speed,course,sats,hdop
-                values = [float(x) for x in values[0:15]]
-                accel = np.array(values[0:3]) 
-                gyro = np.array(values[3:6])
-                deltaT = time.time() - tPrev
+                    B = np.array([
+                        [(deltaT**2)/2, 0, 0],
+                        [0, (deltaT**2)/2, 0],
+                        [0, 0, (deltaT**2)/2],
+                        [deltaT, 0, 0],
+                        [0, deltaT, 0],
+                        [0, 0, deltaT]])
+                    
+                    x_n = F@x_n + B@accel
+                    P = F@P@(F.T) + Q
 
-                #-------------------------------------------------------------------
-                #[][][][][][][][][][][][]Actual Calculations[][][][][][][][][][][][]
-                #-------------------------------------------------------------------
+                    # get gps update
+                    gX, gY = gpsToCart(values[9], values[10], lat0, lon0)
 
-                # Update gyro quaternion
-                q = quatIntegrate(q, gyro, deltaT)
-                # Update accel quaternion
-                q1 = accelAngle(accel)
-                # Add yaw to accel quaternion since can't estimate yaw
-                rollA, pitchA, _ = quatToEuler(q1)
-                _, _, yawG = quatToEuler(q)
-                q1 = eulerToQuat(rollA, pitchA, yawG)
+                    # KF gps correction
+                    if gX != gpsX:
+                        gpsX = gX
+                        vx, vy = getGPSVel(values[12], values[13])
+                        x_n, P = kfUpdate(x_n, P, np.concatenate([H_x, H_vx, H_vy]), np.diag([R_xy, R_vxy, R_vxy]), np.array([gpsX, vx, vy]))
+                        
+                    if gY != gpsY:
+                        gpsY = gY
+                        vx, vy = getGPSVel(values[12], values[13])
+                        x_n, P = kfUpdate(x_n, P, np.concatenate([H_y, H_vx, H_vy]), np.diag([R_xy, R_vxy, R_vxy]), np.array([gpsY, vx, vy]))
 
-                # Fuse gyro and accel quaternions
-                q = slerp(q, q1, 1-ALPHA)
+                    if values[11] != gpsZ:
+                        x_n, P = kfUpdate(x_n, P, H_vz, R_z, np.array([gpsZ - alt0]))
+                        dtZ = time.time() - ztPrev
 
-                # Get magnetometer heading
-                heading = getHeading(values[6], values[7], values[8], q) * -1
+                        if dtZ > 0.5:
+                            vs = (values[11] - gpsZ) / dtZ
+                            x_n, P = kfUpdate(x_n, P, H_z, R_z, np.array([gpsZ - alt0]))
+                            ztPrev = time.time()
 
-                # Issues with initial yaw estimations
-                #--------------------------------------
-                if not headingInit:
-                    heading0 = heading
-                heading -= heading0
-                heading = heading * math.pi / 180
+                        gpsZ = values[11]
 
-                roll, pitch, _ = quatToEuler(q)
-                q1 = eulerToQuat(roll, pitch, heading)
+                    #-------------------------------------------------------------------
+                    #[][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]:)
+                    #-------------------------------------------------------------------
 
-                # Initialize quaternion from mag on first frame
-                if not headingInit:
-                    q = q1
-                    headingInit = True
-                else:
-                    # Correct yaw toward mag
-                    q_mag = eulerToQuat(roll, pitch, heading)
-                    q = slerp(q, q1, 1 - ALPHAY)
-                #--------------------------------------
+                    # Update basis vectors with rotation
+                    xVec.axis = vector(*Rot[:,0])
+                    yVec.axis = vector(*Rot[:,1])
+                    zVec.axis = vector(*Rot[:,2])
+                    
+                    roll, pitch, yaw = quatToEuler(q)
 
-                # Adjust for rotation and gravity
-                Rot = rotation_matrix(q)
-                accel = np.dot(Rot.T, accel) - accel0
+                    roll *= 180/math.pi
+                    pitch *= 180/math.pi
+                    yaw *= 180/math.pi
 
-                # KF prediction
-                F = np.array([
-                    [1, 0, 0, deltaT, 0, 0],
-                    [0, 1, 0, 0, deltaT, 0],
-                    [0, 0, 1, 0, 0, deltaT],
-                    [0, 0, 0, 1, 0, 0],
-                    [0, 0, 0, 0, 1, 0],
-                    [0, 0, 0, 0, 0, 1]])
-                
-                B = np.array([
-                    [(deltaT**2)/2, 0, 0],
-                    [0, (deltaT**2)/2, 0],
-                    [0, 0, (deltaT**2)/2],
-                    [deltaT, 0, 0],
-                    [0, deltaT, 0],
-                    [0, 0, deltaT]])
-                
-                x_n = F@x_n + B@accel
-                P = F@P@(F.T) + Q
+                    if roll < 0:
+                        roll += 360
+                    if pitch < 0:
+                        pitch += 360
+                    if yaw < 0:
+                        yaw += 360
 
-                # get gps update
-                gX, gY = gpsToCart(values[9], values[10], lat0, lon0)
+                    # Update log
+                    timeObj = datetime.fromtimestamp(time.time())
+                    f.write(f"{timeObj.strftime("%H:%M:%S.%f")[:-4]},{x_n[0]:.3f},{x_n[1]:.3f},{x_n[2]:.3f},{x_n[3]:.3f},{x_n[4]:.3f},{x_n[5]:.3f},{roll:.3f},{pitch:.3f},{yaw:.3f}\n")
 
-                # KF gps correction
-                if gX != gpsX:
-                    gpsX = gX
-                    x_n, P = kfUpdate(x_n, P, H_x, R_xy, np.array([gpsX]))
-                    vx, vy = getGPSVel(values[12], values[13])
-                    x_n, P = kfUpdate(x_n, P, H_vx, R_vxy, np.array([vx]))
-                    x_n, P = kfUpdate(x_n, P, H_vy, R_vxy, np.array([vy]))
+        rate(60)
+    f.close()
 
-                if gY != gpsY:
-                    gpsY = gY
-                    x_n, P = kfUpdate(x_n, P, H_y, R_xy, np.array([gpsY]))
-                    vx, vy = getGPSVel(values[12], values[13])
-                    x_n, P = kfUpdate(x_n, P, H_vx, R_vxy, np.array([vx]))
-                    x_n, P = kfUpdate(x_n, P, H_vy, R_vxy, np.array([vy]))
-
-                if values[11] != gpsZ:
-                    x_n, P = kfUpdate(x_n, P, H_vz, R_z, np.array([gpsZ - alt0]))
-                    dtZ = time.time() - ztPrev
-
-                    if dtZ > 0.5:
-                        vs = (values[11] - gpsZ) / dtZ
-                        x_n, P = kfUpdate(x_n, P, H_z, R_z, np.array([gpsZ - alt0]))
-                        ztPrev = time.time()
-
-                    gpsZ = values[11]
-
-                #-------------------------------------------------------------------
-                #[][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][][]:)
-                #-------------------------------------------------------------------
-
-                # Update basis vectors with rotation
-                xVec.axis = vector(*Rot[:,0])
-                yVec.axis = vector(*Rot[:,1])
-                zVec.axis = vector(*Rot[:,2])
-                
-                roll, pitch, yaw = quatToEuler(q)
-
-                roll *= 180/math.pi
-                pitch *= 180/math.pi
-                yaw *= 180/math.pi
-
-                if roll < 0:
-                    roll += 360
-                if pitch < 0:
-                    pitch += 360
-                if yaw < 0:
-                    yaw += 360
-
-                # Update log
-                timeObj = datetime.fromtimestamp(time.time())
-                f.write(f"{timeObj.strftime("%H:%M:%S.%f")[:-4]},{x_n[0]:.3f},{x_n[1]:.3f},{x_n[2]:.3f},{x_n[3]:.3f},{x_n[4]:.3f},{x_n[5]:.3f},{roll:.3f},{pitch:.3f},{yaw:.3f}\n")
-
-                tPrev = time.time()
-    rate(60)
-f.close()
+if __name__ == "__main__":
+    main()
